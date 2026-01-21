@@ -1,0 +1,506 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <title>Atenlab VNA V2.0 - 專業網格強化版</title>
+    <style>
+        :root {
+            --vna-body: #535c68; --screen-bg: #050505;
+            --ch1: #f1c40f; --ch2: #00d2d3; --ch3: #ff9ff3; --ch4: #ecf0f1;
+            --limit-line: #ff4757; 
+            --grid-color: #333; --smith-color: #2c3a47;
+            --text-green: #2ecc71; --text-orange: #f39c12; --text-gray: #bdc3c7;
+            --btn-blue: #3498db; --btn-red: #e74c3c; --btn-green: #2ecc71; --btn-dark: #2d3436;
+        }
+
+        body { background: #1a1a1a; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; font-family: "Consolas", "Monaco", "Microsoft JhengHei", monospace; overflow: hidden; user-select: none; }
+
+        /* VNA 機殼 */
+        #vna-case {
+            width: 840px; height: 540px; background: var(--vna-body); border-radius: 10px;
+            padding: 25px; box-shadow: 0 50px 100px rgba(0,0,0,0.9), inset 0 2px 5px rgba(255,255,255,0.1);
+            display: flex; flex-direction: column; align-items: center; position: relative; border: 1px solid #333;
+        }
+
+        /* 螢幕外框 */
+        #vna-screen {
+            width: 740px; height: 420px; background: var(--screen-bg); border: 8px solid #222;
+            border-radius: 4px; position: relative; overflow: hidden; display: flex;
+            box-shadow: inset 0 0 20px rgba(0,0,0,0.8);
+        }
+
+        /* 左側主顯示區 */
+        #display-panel { flex: 1; position: relative; display: flex; flex-direction: column; border-right: 1px solid #222; }
+        
+        /* Header Channel Info */
+        #header-bar { height: 45px; width: 100%; background: #0a0a0a; display: flex; border-bottom: 1px solid #333; z-index: 50; }
+        .ch-indicator { flex: 1; display: flex; flex-direction: column; justify-content: center; align-items: center; font-size: 11px; border-right: 1px solid #222; opacity: 0.3; cursor: pointer; transition: 0.2s; color: #aaa; }
+        .ch-indicator.active { opacity: 1; background: rgba(255,255,255,0.08); font-weight: bold; }
+        .ch-indicator:nth-child(1).active { color: var(--ch1); }
+        .ch-indicator:nth-child(2).active { color: var(--ch2); }
+        .ch-indicator:nth-child(3).active { color: var(--ch3); }
+        .ch-indicator:nth-child(4).active { color: var(--ch4); }
+
+        /* 繪圖區 */
+        #plot-area { flex: 1; position: relative; overflow: hidden; }
+        
+        /* 網格樣式 SVG */
+        .grid-line { stroke: var(--grid-color); stroke-width: 1; shape-rendering: crispEdges; }
+        .grid-border { stroke: #555; stroke-width: 2; fill: none; }
+        .smith-line { stroke: var(--smith-color); fill: none; stroke-width: 1; opacity: 0.6; }
+        .axis-text { fill: #666; font-size: 10px; font-family: sans-serif; text-anchor: end; }
+        
+        /* 判定字樣 */
+        #judge-overlay { display: none; position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); font-size: 90px; font-weight: bold; z-index: 100; text-shadow: 0 0 20px #000; pointer-events: none; }
+        
+        /* 底部資訊列 */
+        #footer-bar { height: 22px; background: #0a0a0a; color: var(--text-green); font-size: 12px; display: flex; justify-content: space-between; padding: 0 20px; align-items: center; border-top: 1px solid #333; }
+
+        /* 右側選單 */
+        #side-menu { width: 140px; background: #151515; display: flex; flex-direction: column; border-left: 1px solid #333; }
+        .soft-key { flex: 1; border-bottom: 1px solid #333; display: flex; align-items: center; justify-content: center; font-size: 14px; cursor: pointer; color: #ddd; background: linear-gradient(180deg, #222, #111); text-align: center; padding: 0 5px; transition: 0.1s; }
+        .soft-key:active { background: #444; color: white; }
+        .soft-key.home-link { color: var(--text-orange); font-weight: bold; border-top: 2px solid var(--text-orange); }
+
+        /* 覆蓋層 (Popup) */
+        .full-overlay { position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.92); z-index: 1000; display: flex; flex-direction: column; justify-content: center; align-items: center; backdrop-filter: blur(2px); }
+        .boot-btn { border: 2px solid var(--text-green); padding: 15px 50px; margin: 12px; cursor: pointer; color: var(--text-green); font-size: 1.4em; width: 260px; text-align: center; background: rgba(0,50,0,0.2); border-radius: 4px; }
+        .boot-btn:hover { background: var(--text-green); color: black; }
+
+        /* 線纜設定樣式 */
+        .setup-box { border: 1px solid #444; padding: 30px; border-radius: 8px; background: #111; text-align: center; }
+        .setup-row { margin: 15px 0; color: white; font-size: 18px; text-align: left; }
+        .setup-input { background: #222; color: white; border: 1px solid #555; padding: 8px; font-size: 16px; margin-left: 10px; border-radius: 3px; }
+        .action-btn { background: var(--btn-green); color: black; border: none; font-weight: bold; padding: 12px 60px; font-size: 18px; border-radius: 5px; cursor: pointer; margin-top: 20px; width: 100%; }
+        
+        /* 檔案列表樣式 */
+        .file-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; width: 80%; }
+        .file-item { border: 1px solid #555; background: #1a1a1a; padding: 15px; color: white; text-align: center; cursor: pointer; font-size: 16px; transition: 0.2s; }
+        .file-item:hover { background: var(--text-green); color: black; border-color: var(--text-green); }
+
+        /* 鍵盤 */
+        #kb-dialog { display: none; position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.95); z-index: 2000; padding: 20px; box-sizing: border-box; }
+        .kb-container { display: flex; height: 100%; gap: 15px; }
+        .kb-numpad { flex: 2.5; display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+        .kb-actions { flex: 1; display: flex; flex-direction: column; gap: 10px; }
+        .k-btn { background: var(--btn-dark); border-radius: 6px; display: flex; align-items: center; justify-content: center; font-size: 24px; cursor: pointer; color: white; border: 1px solid #444; box-shadow: 0 2px 0 #000; }
+        .k-btn:active { transform: translateY(2px); box-shadow: none; }
+        .k-btn.unit { background: var(--btn-blue); font-size: 18px; font-weight: bold; border-color: #2980b9; }
+        .k-btn.confirm { background: var(--btn-green); font-weight: bold; font-size: 20px; flex-grow: 1; color: #000; border-color: #27ae60; }
+        .k-btn.delete { background: #e67e22; font-size: 22px; border-color: #d35400; } 
+        .k-btn.clear { background: var(--btn-red); border-color: #c0392b; }
+
+        /* 規格表 */
+        #spec-panel { display: none; position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: #000; z-index: 600; padding: 15px; color: white; }
+        table { width: 100%; border-collapse: collapse; margin-top: 15px; border: 1px solid #333; }
+        th, td { border: 1px solid #333; padding: 8px; text-align: center; }
+        th { background: #222; color: var(--text-orange); }
+
+        /* 底部硬體接頭 */
+        .hw-footer { width: 100%; display: flex; justify-content: space-around; margin-top: 20px; }
+        .sma-connector { display: flex; flex-direction: column; align-items: center; color: #888; font-size: 12px; }
+        .sma-nut { width: 32px; height: 14px; background: linear-gradient(to bottom, #bdc3c7, #7f8c8d); border-radius: 2px; margin-top: 2px; border: 1px solid #666; }
+        .sma-pin { width: 8px; height: 8px; background: #f1c40f; border-radius: 50%; margin-top: -4px; border: 1px solid #b7950b; }
+    </style>
+</head>
+<body>
+
+<div id="vna-case">
+    <div id="vna-screen">
+        
+        <div id="boot-screen" class="full-overlay">
+            <h1 style="color:white; margin-bottom: 30px; letter-spacing: 4px; text-shadow: 0 0 10px rgba(255,255,255,0.5);">ATENLAB VNA 2.0</h1>
+            <div class="boot-btn" onclick="initMode('cable')">線纜測試</div>
+            <div class="boot-btn" onclick="initMode('antenna')">天線測試</div>
+            <div class="boot-btn" onclick="initMode('expert')">專家模式</div>
+        </div>
+
+        <div id="cable-setup" class="full-overlay" style="display:none;">
+            <div class="setup-box">
+                <h2 style="color:var(--text-orange); margin-bottom:25px; border-bottom:1px solid #444; padding-bottom:10px;">線纜測試設定</h2>
+                <div class="setup-row">線纜類型：
+                    <select class="setup-input" style="width:200px;">
+                        <option>RG-58 (0.5 dB/m)</option>
+                        <option>LMR-400 (0.13 dB/m)</option>
+                    </select>
+                </div>
+                <div class="setup-row">預估長度：
+                    <input type="number" value="10" class="setup-input" style="width:80px;"> m
+                </div>
+                <button class="action-btn" onclick="runCableTest(false)">開始檢測</button>
+            </div>
+            <div style="margin-top:20px; color:#aaa; cursor:pointer; text-decoration:underline;" onclick="goBoot()">← 放棄並回首頁</div>
+        </div>
+
+        <div id="antenna-recall" class="full-overlay" style="display:none;">
+            <h3 style="color:var(--text-orange); margin-bottom:20px;">選取待測天線存檔</h3>
+            <div class="file-grid">
+                <div class="file-item" onclick="runAntennaTest('鞭型天線', true)">鞭型天線</div>
+                <div class="file-item" onclick="runAntennaTest('喇叭天線', false)">喇叭天線</div>
+                <div class="file-item" onclick="runAntennaTest('偶極天線', true)">偶極天線</div>
+                <div class="file-item" onclick="runAntennaTest('自訂天線 1', true)">自訂天線 1</div>
+            </div>
+            <div style="margin-top:20px; color:#aaa; cursor:pointer; text-decoration:underline;" onclick="goBoot()">← 放棄並回首頁</div>
+        </div>
+
+        <div id="kb-dialog">
+            <div style="color:var(--text-orange); font-size:18px; margin-bottom:10px; font-weight:bold;" id="kb-title">輸入頻率</div>
+            <div style="background:#222; font-size:40px; text-align:right; padding:10px; color:white; margin-bottom:20px; border:1px solid #555; font-family:monospace;" id="kb-val">0</div>
+            <div class="kb-container">
+                <div class="kb-numpad" id="kb-nums">
+                    </div>
+                <div class="kb-actions" id="kb-units">
+                    </div>
+            </div>
+        </div>
+
+        <div id="spec-panel">
+            <div style="display:flex; justify-content:space-between; margin-bottom:10px; align-items:center;">
+                <span style="color:var(--text-orange); font-size:16px; font-weight:bold;">規格判定表 (1-9)</span>
+                <button onclick="closeSpec()" style="background:var(--btn-red); color:white; border:none; padding:8px 20px; cursor:pointer; font-weight:bold; border-radius:4px;">關閉</button>
+            </div>
+            <table>
+                <thead><tr><th>編號</th><th>頻率(GHz)</th><th>判定</th><th>門檻(dB)</th></tr></thead>
+                <tbody>
+                <script>for(let i=1; i<=9; i++) document.write(`<tr><td>${i}</td><td>${(2+i*0.1).toFixed(1)}</td><td>小於</td><td>-15</td></tr>`);</script>
+                </tbody>
+            </table>
+        </div>
+
+        <div id="display-panel">
+            <div id="header-bar">
+                <div class="ch-indicator active" id="hdr-ch1" onclick="toggleTrace(1)">CH1 S11 LogM<br>10dB/ -25.4</div>
+                <div class="ch-indicator active" id="hdr-ch2" onclick="toggleTrace(2)">CH2 S21 LogM<br>10dB/ -2.1</div>
+                <div class="ch-indicator active" id="hdr-ch3" onclick="toggleTrace(3)">CH3 SWR<br>0.5/ 1.12</div>
+                <div class="ch-indicator active" id="hdr-ch4" onclick="toggleTrace(4)">CH4 Smith<br>50Ω</div>
+            </div>
+
+            <div id="plot-area">
+                <div id="judge-overlay">合格</div>
+                
+                <svg width="100%" height="100%" viewBox="0 0 600 330" style="position:absolute; top:0; left:0;">
+                    <defs>
+                        <pattern id="gridPattern" width="60" height="33" patternUnits="userSpaceOnUse">
+                            <path d="M 60 0 L 0 0 0 33" fill="none" stroke="#333" stroke-width="1"/>
+                        </pattern>
+                    </defs>
+                    <rect width="600" height="330" fill="url(#gridPattern)" />
+                    
+                    <text x="55" y="10" class="axis-text">0</text>
+                    <text x="55" y="43" class="axis-text">-10</text>
+                    <text x="55" y="76" class="axis-text">-20</text>
+                    <text x="55" y="109" class="axis-text">-30</text>
+                    <text x="55" y="142" class="axis-text">-40</text>
+                    <text x="55" y="175" class="axis-text">-50</text>
+                    <text x="55" y="208" class="axis-text">-60</text>
+                    <text x="55" y="241" class="axis-text">-70</text>
+                    <text x="55" y="274" class="axis-text">-80</text>
+                    <text x="55" y="307" class="axis-text">-90</text>
+
+                    <g class="smith-line">
+                        <circle cx="300" cy="165" r="150" />
+                        <circle cx="375" cy="165" r="75" />
+                        <circle cx="450" cy="165" r="37.5" />
+                        <path d="M150,165 Q300,-135 450,165" />
+                        <path d="M150,165 Q300,465 450,165" />
+                        <path d="M300,315 A150,150 0 0,1 300,15" /> 
+                    </g>
+                    
+                    <path id="limit-line" d="M0,109 L600,109" fill="none" stroke="var(--limit-line)" stroke-width="2" stroke-dasharray="8,4" style="display:none;" />
+
+                    <path id="tr-ch1" d="M0,275 Q200,220 400,242 T600,88" fill="none" stroke="var(--ch1)" stroke-width="2" />
+                    <path id="tr-ch2" d="M0,55 Q200,66 400,60 T600,71" fill="none" stroke="var(--ch2)" stroke-width="2" />
+                    <path id="tr-ch3" d="M0,308 L150,297 L300,302 L450,291 L600,299" fill="none" stroke="var(--ch3)" stroke-width="2" />
+                    <path id="tr-ch4" d="M375,165 Q385,145 395,160" fill="none" stroke="var(--ch4)" stroke-width="2" />
+
+                    <g id="fault-marker" style="display:none;">
+                        <circle cx="220" cy="109" r="6" fill="red" stroke="white" stroke-width="2" />
+                        <text x="230" y="100" fill="red" font-size="14" font-weight="bold">Fault: 3.5m</text>
+                    </g>
+                </svg>
+
+                <div id="cable-info" style="display:none; position:absolute; bottom:5px; left:60px; background:rgba(0,0,0,0.8); padding:8px; border:1px solid #555; border-radius:4px;">
+                    <div style="color:white; font-size:12px; margin-bottom:4px;">線纜健康度: <span id="health-val" style="color:var(--text-orange); font-size:14px; font-weight:bold;">--</span>%</div>
+                    <div style="height:8px; width:120px; background:#333; border-radius:4px; overflow:hidden;"><div id="health-bar" style="height:100%; width:0%; background:var(--btn-green); transition: width 0.5s;"></div></div>
+                </div>
+            </div>
+            
+            <div id="footer-bar">
+                <span>START: 2.000 000 GHz</span>
+                <span>STOP: 3.000 000 GHz</span>
+            </div>
+        </div>
+
+        <div id="side-menu"></div>
+    </div>
+    
+    <div class="hw-footer">
+        <div class="sma-connector">
+            <span>Port 1</span>
+            <div class="sma-nut"></div>
+            <div class="sma-pin"></div>
+        </div>
+        <div style="display:flex; align-items:center; gap:15px; font-size:10px; opacity:0.7; color:white;">
+            <div style="width:25px; height:8px; background:#333; border-radius:4px;"></div>
+            <span>RUN / STOP</span>
+            <div style="width:8px; height:8px; background:#111; border-radius:50%; box-shadow:0 0 5px rgba(0,255,0,0.5);"></div>
+        </div>
+        <div class="sma-connector">
+            <span>Port 2</span>
+            <div class="sma-nut"></div>
+            <div class="sma-pin"></div>
+        </div>
+    </div>
+</div>
+
+<script>
+    // --- 全域變數 ---
+    const sideMenu = document.getElementById('side-menu');
+    const judgeOverlay = document.getElementById('judge-overlay');
+    const kb = document.getElementById('kb-dialog');
+    const kbVal = document.getElementById('kb-val');
+    let currentInput = "0";
+    let isExpert = false;
+
+    // --- 1. 開機與模式分流 ---
+    function initMode(mode) {
+        document.getElementById('boot-screen').style.display = 'none';
+        
+        // 重置所有介面狀態
+        hideAllOverlays();
+        judgeOverlay.style.display = 'none';
+        
+        if (mode === 'cable') {
+            isExpert = false;
+            document.getElementById('cable-setup').style.display = 'flex';
+        } else if (mode === 'antenna') {
+            isExpert = false;
+            document.getElementById('antenna-recall').style.display = 'flex';
+        } else if (mode === 'expert') {
+            isExpert = true;
+            toggleTrace([1, 2, 3, 4], true); // 專家模式預設全開
+            document.getElementById('limit-line').style.display = 'none'; // 專家模式預設不開 Limit
+            renderExpertMenu('root');
+        }
+    }
+
+    function goBoot() {
+        location.reload(); 
+    }
+
+    function hideAllOverlays() {
+        document.getElementById('cable-setup').style.display = 'none';
+        document.getElementById('antenna-recall').style.display = 'none';
+        document.getElementById('cable-info').style.display = 'none';
+        document.getElementById('fault-marker').style.display = 'none';
+    }
+
+    // --- 2. 顯示控制 ---
+    function toggleTrace(channels, forceState = null) {
+        const arr = Array.isArray(channels) ? channels : [channels];
+        arr.forEach(ch => {
+            const tr = document.getElementById('tr-ch' + ch);
+            const hdr = document.getElementById('hdr-ch' + ch);
+            
+            // 如果是在專家模式下，允許切換；如果在特定測試模式，強制鎖定
+            let newState;
+            if (forceState !== null) {
+                newState = forceState;
+            } else {
+                newState = tr.style.display === 'none';
+            }
+            
+            tr.style.display = newState ? 'block' : 'none';
+            hdr.classList.toggle('active', newState);
+        });
+    }
+
+    // --- 3. 線纜測試 (Cable Test) ---
+    function runCableTest(isPass) {
+        hideAllOverlays();
+        toggleTrace([1, 2, 3, 4], false); // 關全部
+        toggleTrace(1, true); // 只開 Ch1 (S11)
+        
+        // 顯示 Limit Line
+        const limit = document.getElementById('limit-line');
+        limit.style.display = 'block';
+        limit.setAttribute('d', "M0,132 L600,132"); // 設定一個上限值 (-30dB approx)
+
+        // 鎖定選單
+        sideMenu.innerHTML = `<div class="soft-key" onclick="alert('截圖已儲存')">截圖</div><div style="flex:4"></div><div class="soft-key home-link" onclick="goBoot()">回首頁</div>`;
+
+        // 模擬量測
+        const tr1 = document.getElementById('tr-ch1');
+        tr1.setAttribute('d', "M0,275 L600,275"); // 掃描前平線
+        tr1.setAttribute('stroke', '#fff'); // 掃描中白色
+        
+        document.getElementById('cable-info').style.display = 'block';
+
+        setTimeout(() => {
+            tr1.setAttribute('stroke', 'var(--ch1)');
+            // 不合格模擬 (DTF 故障)
+            // S11 曲線在故障點拉高 (反射大)
+            // 座標轉換: X=220 (約3.5m), Y=109 (Peak)
+            tr1.setAttribute('d', "M0,275 L200,275 L220,109 L240,275 L600,275");
+            
+            // 顯示故障點
+            const marker = document.getElementById('fault-marker');
+            marker.style.display = 'block';
+            
+            // 更新健康度
+            document.getElementById('health-val').innerText = "35";
+            document.getElementById('health-bar').style.width = "35%";
+            document.getElementById('health-bar').style.background = "var(--btn-red)";
+
+            judgeOverlay.innerText = "不合格";
+            judgeOverlay.style.color = "var(--btn-red)";
+            judgeOverlay.style.display = 'block';
+        }, 1000);
+    }
+
+    // --- 4. 天線測試 (Antenna Test) ---
+    function runAntennaTest(name, isPass) {
+        hideAllOverlays();
+        toggleTrace([1, 2, 3, 4], false);
+        toggleTrace(1, true); // 只開 Ch1
+        
+        // Limit Line
+        const limit = document.getElementById('limit-line');
+        limit.style.display = 'block';
+        limit.setAttribute('d', "M0,165 L600,165"); // 模擬 Pass/Fail 門檻 (-40dB approx)
+
+        sideMenu.innerHTML = `<div class="soft-key" onclick="alert('截圖已儲存')">截圖</div><div style="flex:4"></div><div class="soft-key home-link" onclick="goBoot()">回首頁</div>`;
+
+        const tr1 = document.getElementById('tr-ch1');
+        tr1.setAttribute('stroke', '#fff'); // 掃描中
+        
+        setTimeout(() => {
+            tr1.setAttribute('stroke', 'var(--ch1)');
+            if(isPass) {
+                // 合格曲線 (在 Limit 下方)
+                tr1.setAttribute('d', "M0,300 Q300,220 600,280"); 
+                judgeOverlay.innerText = "合格";
+                judgeOverlay.style.color = "var(--btn-green)";
+            } else {
+                // 不合格曲線 (突破 Limit)
+                tr1.setAttribute('d', "M0,300 Q300,55 600,280"); 
+                judgeOverlay.innerText = "不合格";
+                judgeOverlay.style.color = "var(--btn-red)";
+            }
+            judgeOverlay.style.display = 'block';
+        }, 1000);
+    }
+
+    // --- 5. 專家模式選單系統 ---
+    const expertTree = {
+        root: ["設定", "校正", "存檔", "規格", "重置"],
+        setting: ["頻率", "顯示", "搜尋", "回首頁"],
+        freq: ["起始", "結束", "中心", "範圍", "回首頁"],
+        disp: ["自動格子", "單位振幅", "中心振幅", "回首頁"],
+        search: ["找最大", "找最小", "往左移", "往右移", "自定頻率", "回首頁"],
+        cal: ["執行", "讀檔", "回首頁"],
+        cal_exec: ["開路", "短路", "負載", "直通", "存檔", "回首頁"],
+        save: ["鞭型天線", "喇叭天線", "Save 3", "回首頁"],
+        recall: ["鞭型天線", "喇叭天線", "Recall 3", "回首頁"]
+    };
+
+    function renderExpertMenu(key) {
+        sideMenu.innerHTML = "";
+        const items = expertTree[key] || [];
+        items.forEach(label => {
+            const btn = document.createElement('div');
+            btn.className = "soft-key" + (label === "回首頁" ? " home-link" : "");
+            btn.innerText = label;
+            btn.onclick = () => handleExpertNav(label, key);
+            sideMenu.appendChild(btn);
+        });
+    }
+
+    function handleExpertNav(label, currentKey) {
+        if (label === "重置") goBoot(); // 回到系統開機面
+        else if (label === "回首頁") renderExpertMenu('root'); // 回到專家首頁
+        else if (label === "規格") document.getElementById('spec-panel').style.display = 'block';
+        else if (label === "設定") renderExpertMenu('setting');
+        else if (label === "頻率") renderExpertMenu('freq');
+        else if (label === "顯示") renderExpertMenu('disp');
+        else if (label === "搜尋") renderExpertMenu('search');
+        else if (label === "校正") renderExpertMenu('cal');
+        else if (label === "執行") renderExpertMenu('cal_exec');
+        else if (label === "讀檔") renderExpertMenu('recall');
+        else if (label === "存檔") renderExpertMenu('save');
+        // 鍵盤觸發
+        else if (["起始", "結束", "中心", "範圍", "自定頻率"].includes(label)) openKeypad('freq', label);
+        else if (["單位振幅", "中心振幅"].includes(label)) openKeypad('amp', label);
+        // 專家模式下的模擬動作
+        else if (label.includes("天線")) {
+             alert("專家模式: 已讀取/儲存 " + label);
+             renderExpertMenu('root');
+        }
+    }
+
+    function closeSpec() { document.getElementById('spec-panel').style.display = 'none'; }
+
+    // --- 6. 專業鍵盤邏輯 (含 Delete) ---
+    function openKeypad(type, title) {
+        kb.style.display = 'block';
+        document.getElementById('kb-title').innerText = title;
+        currentInput = "0";
+        kbVal.innerText = currentInput;
+        
+        const numArea = document.getElementById('kb-nums');
+        const actArea = document.getElementById('kb-units');
+        numArea.innerHTML = "";
+        actArea.innerHTML = "";
+
+        // 生成數字區
+        ['7','8','9','4','5','6','1','2','3','C','0','.'].forEach(k => {
+            const b = document.createElement('div');
+            b.className = "k-btn" + (k==='C' ? ' clear' : '');
+            b.innerText = k;
+            b.onclick = () => handleInput(k);
+            numArea.appendChild(b);
+        });
+
+        // 生成右側動作區
+        const units = type === 'freq' ? ['GHz', 'MHz', 'KHz'] : [];
+        units.forEach(u => {
+            const b = document.createElement('div');
+            b.className = "k-btn unit";
+            b.innerText = u;
+            b.onclick = () => closeKb(); // 單位視同確認
+            actArea.appendChild(b);
+        });
+
+        // 刪除鍵 (Delete)
+        const delBtn = document.createElement('div');
+        delBtn.className = "k-btn delete";
+        delBtn.innerText = "⌫"; // Backspace icon
+        delBtn.onclick = () => handleInput('DEL');
+        actArea.appendChild(delBtn);
+
+        // 確認鍵
+        const okBtn = document.createElement('div');
+        okBtn.className = "k-btn confirm";
+        okBtn.innerText = "確認";
+        okBtn.onclick = () => closeKb();
+        actArea.appendChild(okBtn);
+    }
+
+    function handleInput(k) {
+        if (k === 'C') currentInput = "0";
+        else if (k === 'DEL') {
+            currentInput = currentInput.length > 1 ? currentInput.slice(0, -1) : "0";
+        }
+        else {
+            if (currentInput === "0" && k !== '.') currentInput = k;
+            else currentInput += k;
+        }
+        kbVal.innerText = currentInput;
+    }
+
+    function closeKb() { kb.style.display = 'none'; }
+
+</script>
+
+</body>
+</html>
